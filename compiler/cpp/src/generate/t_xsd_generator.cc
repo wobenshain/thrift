@@ -26,7 +26,6 @@
 #include <sstream>
 #include "t_generator.h"
 #include "platform.h"
-
 using std::map;
 using std::ofstream;
 using std::ostream;
@@ -36,6 +35,7 @@ using std::stringstream;
 using std::vector;
 
 static const string endl = "\n";  // avoid ostream << std::endl flushes
+
 
 /**
  * XSD generator, creates an XSD for the base types etc.
@@ -68,9 +68,7 @@ class t_xsd_generator : public t_generator {
    */
 
   void generate_typedef(t_typedef* ttypedef);
-  void generate_enum(t_enum* tenum) {
-    (void) tenum;
-  }
+  void generate_enum(t_enum* tenum);
 
   void generate_service(t_service* tservice);
   void generate_struct(t_struct* tstruct);
@@ -90,92 +88,138 @@ class t_xsd_generator : public t_generator {
   std::string type_name(t_type* ttype);
   std::string base_type_name(t_base_type::t_base tbase);
 
+  void generate_header(std::ostream& out);
+  void generate_footer(std::ostream& out);
+
   /**
    * Output xsd/php file
    */
   std::ofstream f_xsd_;
-  std::ofstream f_php_;
 
   /**
    * Output string stream
    */
   std::ostringstream s_xsd_types_;
-
 };
 
 
 void t_xsd_generator::init_generator() {
   // Make output directory
   MKDIR(get_out_dir().c_str());
-
-  // Make output file
-  string f_php_name = get_out_dir()+program_->get_name()+"_xsd.php";
-  f_php_.open(f_php_name.c_str());
-
-  f_php_ <<
-    "<?php" << endl;
-
 }
 
 void t_xsd_generator::close_generator() {
-  f_php_ << "?>" << endl;
-  f_php_.close();
 }
 
 void t_xsd_generator::generate_typedef(t_typedef* ttypedef) {
-  indent(s_xsd_types_) <<
+  string f_xsd_name = get_out_dir()+ttypedef->get_symbolic()+".xsd";
+  std::ofstream f_outstream;
+  std::ostringstream s_temporary;
+  f_outstream.open(f_xsd_name.c_str());
+
+  generate_header(f_outstream);
+
+  indent(s_temporary) <<
     "<xsd:simpleType name=\"" << ttypedef->get_name() << "\">" << endl;
   indent_up();
   if (ttypedef->get_type()->is_string() && ((t_base_type*)ttypedef->get_type())->is_string_enum()) {
-    indent(s_xsd_types_) <<
+    indent(s_temporary) <<
       "<xsd:restriction base=\"" << type_name(ttypedef->get_type()) << "\">" << endl;
     indent_up();
     const vector<string>& values = ((t_base_type*)ttypedef->get_type())->get_string_enum_vals();
     vector<string>::const_iterator v_iter;
     for (v_iter = values.begin(); v_iter != values.end(); ++v_iter) {
-      indent(s_xsd_types_) <<
+      indent(s_temporary) <<
         "<xsd:enumeration value=\"" << (*v_iter) << "\" />" << endl;
     }
     indent_down();
-    indent(s_xsd_types_) <<
+    indent(s_temporary) <<
       "</xsd:restriction>" << endl;
   } else {
-    indent(s_xsd_types_) <<
+    indent(s_temporary) <<
       "<xsd:restriction base=\"" << type_name(ttypedef->get_type()) << "\" />" << endl;
   }
   indent_down();
-  indent(s_xsd_types_) <<
+  indent(s_temporary) <<
     "</xsd:simpleType>" << endl << endl;
+
+  s_xsd_types_ << s_temporary.str();
+  f_outstream << s_temporary.str();
+
+  generate_footer(f_outstream);
+  f_outstream.close();
+}
+
+void t_xsd_generator::generate_enum(t_enum* tenum) {
+  string f_xsd_name = get_out_dir()+tenum->get_name()+".xsd";
+  std::ofstream f_outstream;
+  std::ostringstream s_temporary;
+  f_outstream.open(f_xsd_name.c_str());
+
+  generate_header(f_outstream);
+
+  indent(s_temporary) << "<xs:simpleType name=\"" << tenum->get_name() << "\">" << endl;
+  indent_up();
+  indent(s_temporary) << "<xs:restriction base=\"xs:string\">" << endl;
+  indent_up();
+  vector<t_enum_value*> constants = tenum->get_constants();
+  vector<t_enum_value*>::iterator c_iter;
+  for (c_iter = constants.begin(); c_iter != constants.end(); ++c_iter) {
+    indent(s_temporary) << "<xs:enumeration value=\"" << (*c_iter)->get_value() << "," << (*c_iter)->get_name() << "\" />" << endl;;
+  }
+  indent_down();
+  indent(s_temporary) << "</xs:restriction>" << endl;
+  indent_down();
+  indent(s_temporary) << "</xs:simpleType>" << endl;
+
+  s_xsd_types_ << s_temporary.str();
+  f_outstream << s_temporary.str();
+
+  generate_footer(f_outstream);
+  f_outstream.close();
 }
 
 void t_xsd_generator::generate_struct(t_struct* tstruct) {
+  string f_xsd_name = get_out_dir()+tstruct->get_name()+".xsd";
+  std::ofstream f_outstream;
+  std::ostringstream s_temporary;
+  f_outstream.open(f_xsd_name.c_str());
+
+  generate_header(f_outstream);
+
   vector<t_field*>::const_iterator m_iter;
   const vector<t_field*>& members = tstruct->get_members();
   bool xsd_all = tstruct->get_xsd_all();
 
-  indent(s_xsd_types_) << "<xsd:complexType name=\"" << tstruct->get_name() << "\">" << endl;
+  indent(s_temporary) << "<xsd:complexType name=\"" << tstruct->get_name() << "\">" << endl;
   indent_up();
   if (xsd_all) {
-    indent(s_xsd_types_) << "<xsd:all>" << endl;
+    indent(s_temporary) << "<xsd:all>" << endl;
   } else {
-    indent(s_xsd_types_) << "<xsd:sequence>" << endl;
+    indent(s_temporary) << "<xsd:sequence>" << endl;
   }
   indent_up();
 
   for (m_iter = members.begin(); m_iter != members.end(); ++m_iter) {
-    generate_element(s_xsd_types_, (*m_iter)->get_name(), (*m_iter)->get_type(), (*m_iter)->get_xsd_attrs(), (*m_iter)->get_xsd_optional() || xsd_all, (*m_iter)->get_xsd_nillable());
+    generate_element(s_temporary, (*m_iter)->get_name(), (*m_iter)->get_type(), (*m_iter)->get_xsd_attrs(), (*m_iter)->get_xsd_optional() || xsd_all, (*m_iter)->get_xsd_nillable());
   }
 
   indent_down();
   if (xsd_all) {
-    indent(s_xsd_types_) << "</xsd:all>" << endl;
+    indent(s_temporary) << "</xsd:all>" << endl;
   } else {
-    indent(s_xsd_types_) << "</xsd:sequence>" << endl;
+    indent(s_temporary) << "</xsd:sequence>" << endl;
   }
   indent_down();
-  indent(s_xsd_types_) <<
+  indent(s_temporary) <<
     "</xsd:complexType>" << endl <<
     endl;
+
+  s_xsd_types_ << s_temporary.str();
+  f_outstream << s_temporary.str();
+
+  generate_footer(f_outstream);
+  f_outstream.close();
 }
 
 void t_xsd_generator::generate_element(ostream& out,
@@ -211,7 +255,6 @@ void t_xsd_generator::generate_element(ostream& out,
         } else {
           subname = type_name(subtype);
         }
-        f_php_ << "$GLOBALS['" << program_->get_name() << "_xsd_elt_" << name << "'] = '" << subname << "';" << endl;
         generate_element(out, subname, subtype, NULL, false, false, true);
         indent_down();
         indent(out) << "</xsd:sequence>" << endl;
@@ -274,12 +317,7 @@ void t_xsd_generator::generate_service(t_service* tservice) {
   }
 
   // Print the XSD header
-  f_xsd_ <<
-    "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" << endl <<
-    "<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"" << ns << ">" << endl <<
-    endl <<
-    "<!-- Yo yo yo, this XSD woz be generated by Thrift. -->" << endl <<
-    endl;
+  generate_header(f_xsd_);
 
   // Print out the type definitions
   indent(f_xsd_) << s_xsd_types_.str();
@@ -310,7 +348,7 @@ void t_xsd_generator::generate_service(t_service* tservice) {
   }
 
   // Close the XSD document
-  f_xsd_ << endl << "</xsd:schema>" << endl;
+  generate_footer(f_xsd_);
   f_xsd_.close();
 }
 
@@ -361,6 +399,27 @@ string t_xsd_generator::base_type_name(t_base_type::t_base tbase) {
   default:
     throw "compiler error: no XSD base type name for base type " + t_base_type::t_base_name(tbase);
   }
+}
+
+void t_xsd_generator::generate_header(std::ostream& out) {
+  string ns = program_->get_namespace("xsd");
+  if (ns.size() > 0) {
+    ns = " targetNamespace=\"" + ns + "\" xmlns=\"" + ns + "\" " +
+      "elementFormDefault=\"qualified\"";
+  }
+
+  // Print the XSD header
+  out <<
+    "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" << endl <<
+    "<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"" << ns << ">" << endl <<
+    endl;
+  indent_up();
+  indent(out) << "<!-- This XSD was generated by Thrift. -->" << endl << endl;
+}
+
+void t_xsd_generator::generate_footer(std::ostream& out) {
+  indent_down();
+  out << "</xsd:schema>" << endl;
 }
 
 THRIFT_REGISTER_GENERATOR(xsd, "XSD", "")
