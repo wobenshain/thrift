@@ -68,7 +68,9 @@ class t_xsd_generator : public t_generator {
    */
 
   void generate_typedef(t_typedef* ttypedef);
-  void generate_enum(t_enum* tenum);
+  void generate_enum(t_enum* tenum) {
+    (void) tenum;
+  }
 
   void generate_service(t_service* tservice);
   void generate_struct(t_struct* tstruct);
@@ -85,7 +87,7 @@ class t_xsd_generator : public t_generator {
     return ns(in, "xsd");
   }
 
-  std::string type_name(t_type* ttype);
+  std::string type_name(t_type* ttype, bool isXsd=true);
   std::string base_type_name(t_base_type::t_base tbase);
 
   void generate_header(std::ostream& out);
@@ -150,35 +152,6 @@ void t_xsd_generator::generate_typedef(t_typedef* ttypedef) {
   f_outstream.close();
 }
 
-void t_xsd_generator::generate_enum(t_enum* tenum) {
-  string f_xsd_name = get_out_dir()+tenum->get_name()+".xsd";
-  std::ofstream f_outstream;
-  std::ostringstream s_temporary;
-  f_outstream.open(f_xsd_name.c_str());
-
-  generate_header(f_outstream);
-
-  indent(s_temporary) << "<xs:simpleType name=\"" << tenum->get_name() << "\">" << endl;
-  indent_up();
-  indent(s_temporary) << "<xs:restriction base=\"xs:string\">" << endl;
-  indent_up();
-  vector<t_enum_value*> constants = tenum->get_constants();
-  vector<t_enum_value*>::iterator c_iter;
-  for (c_iter = constants.begin(); c_iter != constants.end(); ++c_iter) {
-    indent(s_temporary) << "<xs:enumeration value=\"" << (*c_iter)->get_value() << "," << (*c_iter)->get_name() << "\" />" << endl;;
-  }
-  indent_down();
-  indent(s_temporary) << "</xs:restriction>" << endl;
-  indent_down();
-  indent(s_temporary) << "</xs:simpleType>" << endl;
-
-  s_xsd_types_ << s_temporary.str();
-  f_outstream << s_temporary.str();
-
-  generate_footer(f_outstream);
-  f_outstream.close();
-}
-
 void t_xsd_generator::generate_struct(t_struct* tstruct) {
   string f_xsd_name = get_out_dir()+tstruct->get_name()+".xsd";
   std::ofstream f_outstream;
@@ -234,7 +207,7 @@ void t_xsd_generator::generate_element(ostream& out,
   string soptional = sminOccurs + smaxOccurs;
   string snillable = nillable ? " nillable=\"true\"" : "";
 
-  if (ttype->is_void() || ttype->is_list()) {
+  if (ttype->is_void() || ttype->is_list() || ttype->is_set() || ttype->is_map()) {
     indent(out) <<
       "<xsd:element name=\"" << name << "\"" << soptional << snillable << ">" << endl;
     indent_up();
@@ -246,8 +219,13 @@ void t_xsd_generator::generate_element(ostream& out,
         "<xsd:complexType>" << endl;
       indent_up();
       if (ttype->is_list()) {
+        indent(out) << "<xsd:sequence>" << endl;
+        indent_up();
+        indent(out) << "<xsd:element name=\"val_type\" type=\"xsd:string\"/>" << endl;
+        indent(out) << "<xsd:element name=\"entry_count\" type=\"xsd:integer\"/>" << endl;
         indent(out) << "<xsd:sequence minOccurs=\"0\" maxOccurs=\"unbounded\">" << endl;
         indent_up();
+/*        
         string subname;
         t_type* subtype = ((t_list*)ttype)->get_elem_type();
         if (subtype->is_base_type() || subtype->is_container()) {
@@ -256,9 +234,73 @@ void t_xsd_generator::generate_element(ostream& out,
           subname = type_name(subtype);
         }
         generate_element(out, subname, subtype, NULL, false, false, true);
+//*/
+        indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_list*)ttype)->get_elem_type()) << "\"/>" << endl;
         indent_down();
         indent(out) << "</xsd:sequence>" << endl;
-        indent(out) << "<xsd:attribute name=\"list\" type=\"xsd:boolean\" />" << endl;
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"list\" use=\"required\"/>" << endl;
+        indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+      }
+      if (ttype->is_set()) {
+        indent(out) << "<xsd:sequence>" << endl;
+        indent_up();
+        indent(out) << "<xsd:element name=\"val_type\" type=\"xsd:string\"/>" << endl;
+        indent(out) << "<xsd:element name=\"entry_count\" type=\"xsd:integer\"/>" << endl;
+        indent(out) << "<xsd:sequence minOccurs=\"0\" maxOccurs=\"unbounded\">" << endl;
+        indent_up();
+/*
+        string subname;
+        t_type* subtype = ((t_set*)ttype)->get_elem_type();
+        if (subtype->is_base_type() || subtype->is_container()) {
+          subname = name + "_elt";
+        } else {
+          subname = type_name(subtype);
+        }
+        generate_element(out, subname, subtype, NULL, false, false, true);
+//*/
+        indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_set*)ttype)->get_elem_type()) << "\"/>" << endl;
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"set\" use=\"required\"/>" << endl;
+        indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+      }
+      if (ttype->is_map()) {
+        indent(out) << "<xsd:sequence>" << endl;
+        indent_up();
+        indent(out) << "<xsd:element name=\"key_type\" type=\"xsd:string\"/>" << endl;
+        indent(out) << "<xsd:element name=\"val_type\" type=\"xsd:string\"/>" << endl;
+        indent(out) << "<xsd:element name=\"entry_count\" type=\"xsd:integer\"/>" << endl;
+        indent(out) << "<xsd:sequence minOccurs=\"0\" maxOccurs=\"unbounded\">" << endl;
+        indent_up();
+        indent(out) << "<xsd:element name=\"key\" type=\"" << type_name(((t_map*)ttype)->get_key_type()) << "\"/>" << endl;
+        indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_map*)ttype)->get_val_type()) << "\"/>" << endl;
+/*
+        string subname;
+        t_type* subtype = ((t_map*)ttype)->get_key_type();
+        if (subtype->is_base_type() || subtype->is_container()) {
+          subname = name + "_key";
+        } else {
+          subname = type_name(subtype);
+        }
+        generate_element(out, subname, subtype, NULL, false, false, true);
+        subtype = ((t_map*)ttype)->get_val_type();
+        if (subtype->is_base_type() || subtype->is_container()) {
+          subname = name + "_val";
+        } else {
+          subname = type_name(subtype);
+        }
+        generate_element(out, subname, subtype, NULL, false, false, true);
+//*/
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"map\" use=\"required\"/>" << endl;
+        indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
       }
       if (attrs != NULL) {
         const vector<t_field*>& members = attrs->get_members();
@@ -276,8 +318,26 @@ void t_xsd_generator::generate_element(ostream& out,
       "</xsd:element>" << endl;
   } else {
     if (attrs == NULL) {
-      indent(out) <<
-        "<xsd:element name=\"" << name << "\"" << " type=\"" << type_name(ttype) << "\"" << soptional << snillable << " />" << endl;
+      indent(out) << "<xsd:element name=\"" << name << "\">" << endl;
+      indent_up();
+      indent(out) << "<xsd:complexType>" << endl;
+      indent_up();
+      indent(out) << "<xsd:simpleContent>" << endl;
+      indent_up();
+      indent(out) << "<xsd:extension base=\"" << type_name(ttype) << "\">" << endl;
+      indent_up();
+      indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"" << type_name(ttype,false) << "\" use=\"required\"/>" << endl;
+      if (!list_element) {
+        indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+      }
+      indent_down();
+      indent(out) << "</xsd:extension>" << endl;
+      indent_down();
+      indent(out) << "</xsd:simpleContent>" << endl;
+      indent_down();
+      indent(out) << "</xsd:complexType>" << endl;
+      indent_down();
+      indent(out) << "</xsd:element>" << endl;
     } else {
       // Wow, all this work for a SIMPLE TYPE with attributes?!?!?!
       indent(out) << "<xsd:element name=\"" << name << "\"" << soptional << snillable << ">" << endl;
@@ -352,17 +412,23 @@ void t_xsd_generator::generate_service(t_service* tservice) {
   f_xsd_.close();
 }
 
-string t_xsd_generator::type_name(t_type* ttype) {
+string t_xsd_generator::type_name(t_type* ttype, bool isXsd) {
   if (ttype->is_typedef()) {
     return ttype->get_name();
   }
 
   if (ttype->is_base_type()) {
-    return xsd(base_type_name(((t_base_type*)ttype)->get_base()));
+  	if (isXsd)
+      return xsd(base_type_name(((t_base_type*)ttype)->get_base()));
+    else
+      return base_type_name(((t_base_type*)ttype)->get_base());
   }
 
   if (ttype->is_enum()) {
-    return xsd("int");
+    if (isXsd)
+      return xsd("int");
+    else
+      return "int";
   }
 
   if (ttype->is_struct() || ttype->is_xception()) {
@@ -404,8 +470,7 @@ string t_xsd_generator::base_type_name(t_base_type::t_base tbase) {
 void t_xsd_generator::generate_header(std::ostream& out) {
   string ns = program_->get_namespace("xsd");
   if (ns.size() > 0) {
-    ns = " targetNamespace=\"" + ns + "\" xmlns=\"" + ns + "\" " +
-      "elementFormDefault=\"qualified\"";
+    ns = " targetNamespace=\"" + ns + "\" xmlns=\"" + ns + "\" elementFormDefault=\"qualified\"";
   }
 
   // Print the XSD header
