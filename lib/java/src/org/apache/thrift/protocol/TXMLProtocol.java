@@ -75,7 +75,7 @@ public class TXMLProtocol extends TProtocol {
   private static final byte[] NAME_I32 = new byte[] {'i','n','t'};
   private static final byte[] NAME_I64 = new byte[] {'l','o','n','g'};
   private static final byte[] NAME_DOUBLE = new byte[] {'d','e','c','i','m','a','l'};
-  private static final byte[] NAME_STRUCT = new byte[] {'r','e','c'};
+  private static final byte[] NAME_STRUCT = new byte[] {'s','t','r','u','c','t'};
   private static final byte[] NAME_STRING = new byte[] {'s','t','r','i','n','g'};
   private static final byte[] NAME_MAP = new byte[] {'m','a','p'};
   private static final byte[] NAME_LIST = new byte[] {'l','i','s','t'};
@@ -113,8 +113,7 @@ public class TXMLProtocol extends TProtocol {
     }
   }
 
-  private static final byte getTypeIDForTypeName(byte[] name)
-    throws TException {
+  private static final byte getTypeIDForTypeName(byte[] name) throws TException {
     byte result = TType.STOP;
     if (name.length > 1) {
       switch (name[0]) {
@@ -167,6 +166,8 @@ public class TXMLProtocol extends TProtocol {
         case 't':
           if (new String(name).equals(new String(NAME_STRING)))
             result = TType.STRING;
+          if (new String(name).equals(new String(NAME_STRUCT)))
+            result = TType.STRUCT;
           break;
         }
         break;
@@ -397,30 +398,48 @@ public class TXMLProtocol extends TProtocol {
   }
 
   protected class LookaheadReader {
-
-    private boolean hasData_;
+    private boolean hasData_ = false;
     private byte[] data_ = new byte[1];
 
     // Return and consume the next byte to be read, either taking it from the
     // data buffer if present or getting it from the transport otherwise.
     protected byte read() throws TException {
-      if (hasData_) {
+      if (!hasData_) {
+        data_[0] = peek(1);
         hasData_ = false;
-      }
-      else {
-        trans_.readAll(data_, 0, 1);
+      } else if (data_.length > 1) {
+        byte[] alternate = new byte[data_.length-1];
+        for (int i=1; i<data_.length;i++)
+          alternate[i-1] = data_[i];
+        byte forReturn = data_[0];
+        data_ = alternate;
+        return forReturn;
+      } else {
+        hasData_ = false;
       }
       return data_[0];
     }
 
-    // Return the next byte to be read without consuming, filling the data
-    // buffer if it has not been filled already.
     protected byte peek() throws TException {
-      if (!hasData_) {
-        trans_.readAll(data_, 0, 1);
+      return peek(1);
+    }
+
+    protected byte peek(int place) throws TException {
+      byte[] alternate = new byte[place];
+      if (hasData_) {
+        if (place <= data_.length) {
+          return data_[place-1];
+        }
+        trans_.readAll(alternate, data_.length, place);
+        for(int i=0;i<data_.length;i++) {
+          alternate[i]=data_[i];
+        }
+      } else {
+        trans_.readAll(alternate,0,place);
       }
+      data_ = alternate;
       hasData_ = true;
-      return data_[0];
+      return data_[place-1];
     }
   }
 
@@ -458,10 +477,8 @@ public class TXMLProtocol extends TProtocol {
     reader_ = new LookaheadReader();
   }
 
-  // Temporary buffer used by several methods
   private byte[] tmpbuf_ = new byte[4];
 
-  // Read a byte that must match b[0]; otherwise an exception is thrown.
   protected void readXMLSyntaxChar(byte[] b) throws TException {
     for (int i = 0; i < b.length; i++) {
       byte ch = reader_.read();
@@ -560,6 +577,7 @@ public class TXMLProtocol extends TProtocol {
 
   @Override
   public void writeStructBegin(TStruct struct) throws TException {
+    context_.write();
     writeXMLStart(struct.name);
     context_.write();
   }
@@ -568,6 +586,7 @@ public class TXMLProtocol extends TProtocol {
   public void writeStructEnd() throws TException {
     context_.write();
     writeXMLEnd();
+    context_.write();
   }
 
   @Override
@@ -940,6 +959,7 @@ private ThreeTuple<String,Byte,Short> readXMLTag() throws TException {
 
   @Override
   public TStruct readStructBegin() throws TException {
+    context_.read();
     pushContext(new XMLPairContext());
     return ANONYMOUS_STRUCT;
   }
@@ -948,14 +968,18 @@ private ThreeTuple<String,Byte,Short> readXMLTag() throws TException {
   public void readStructEnd() throws TException {
     context_.read();
     popContext();
+    context_.read();
   }
 
   @Override
   public TField readFieldBegin() throws TException {
+    byte ch = reader_.peek(2);
+    if (ch == '/')
+      return new TField("",TType.STOP,(short)0);
     pushContext(new XMLPairContext());
     XMLPairContext tempContext = ((XMLPairContext)context_);
     pushContext(new XMLBaseContext());
-    return new TField(tempContext.getName(),tempContext.getName().getBytes()[0] == SLASH[0] ? TType.STOP : tempContext.getType(),tempContext.fieldId == null ? 0 : tempContext.fieldId);
+    return new TField(tempContext.getName(),tempContext.getType(),tempContext.fieldId == null ? 0 : tempContext.fieldId);
   }
 
   @Override

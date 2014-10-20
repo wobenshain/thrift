@@ -174,7 +174,7 @@ void t_xsd_generator::generate_struct(t_struct* tstruct) {
   indent_up();
 
   for (m_iter = members.begin(); m_iter != members.end(); ++m_iter) {
-    generate_element(s_temporary, (*m_iter)->get_name(), (*m_iter)->get_type(), (*m_iter)->get_xsd_attrs(), (*m_iter)->get_xsd_optional() || xsd_all, (*m_iter)->get_xsd_nillable());
+    generate_element(s_temporary, (*m_iter)->get_name(), (*m_iter)->get_type(), (*m_iter)->get_xsd_attrs(), ((*m_iter)->get_req() == t_field::T_OPTIONAL) || (*m_iter)->get_xsd_optional() || xsd_all, (*m_iter)->get_xsd_nillable());
   }
 
   indent_down();
@@ -318,22 +318,34 @@ void t_xsd_generator::generate_element(ostream& out,
       "</xsd:element>" << endl;
   } else {
     if (attrs == NULL) {
-      indent(out) << "<xsd:element name=\"" << name << "\">" << endl;
+      indent(out) << "<xsd:element name=\"" << name << "\"" << soptional << ">" << endl;
       indent_up();
       indent(out) << "<xsd:complexType>" << endl;
       indent_up();
-      indent(out) << "<xsd:simpleContent>" << endl;
-      indent_up();
-      indent(out) << "<xsd:extension base=\"" << type_name(ttype) << "\">" << endl;
-      indent_up();
-      indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"" << type_name(ttype,false) << "\" use=\"required\"/>" << endl;
-      if (!list_element) {
-        indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+      if (ttype->is_struct()) {
+        indent(out) << "<xsd:sequence>" << endl;
+        indent_up();
+		indent(out) << "<xsd:element name=\"" << type_name(ttype) << "\" type=\"" << type_name(ttype) << "\"/>" << endl;
+        indent_down();
+        indent(out) << "</xsd:sequence>" << endl;
+        indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"" << type_name(ttype,false) << "\" use=\"required\"/>" << endl;
+        if (!list_element) {
+          indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+        }
+      } else {
+        indent(out) << "<xsd:simpleContent>" << endl;
+        indent_up();
+        indent(out) << "<xsd:extension base=\"" << type_name(ttype) << "\">" << endl;
+        indent_up();
+        indent(out) << "<xsd:attribute name=\"type\" type=\"xsd:string\" fixed=\"" << type_name(ttype,false) << "\" use=\"required\"/>" << endl;
+        if (!list_element) {
+          indent(out) << "<xsd:attribute name=\"field\" type=\"xsd:int\" use=\"required\"/>" << endl;
+        }
+        indent_down();
+        indent(out) << "</xsd:extension>" << endl;
+        indent_down();
+        indent(out) << "</xsd:simpleContent>" << endl;
       }
-      indent_down();
-      indent(out) << "</xsd:extension>" << endl;
-      indent_down();
-      indent(out) << "</xsd:simpleContent>" << endl;
       indent_down();
       indent(out) << "</xsd:complexType>" << endl;
       indent_down();
@@ -432,7 +444,10 @@ string t_xsd_generator::type_name(t_type* ttype, bool isXsd) {
   }
 
   if (ttype->is_struct() || ttype->is_xception()) {
-    return ttype->get_name();
+    if (isXsd)
+      return ttype->get_name();
+    else
+      return "struct";
   }
 
   return "container";
