@@ -225,16 +225,6 @@ void t_xsd_generator::generate_element(ostream& out,
         indent(out) << "<xsd:element name=\"entry_count\" type=\"xsd:integer\"/>" << endl;
         indent(out) << "<xsd:sequence minOccurs=\"0\" maxOccurs=\"unbounded\">" << endl;
         indent_up();
-/*        
-        string subname;
-        t_type* subtype = ((t_list*)ttype)->get_elem_type();
-        if (subtype->is_base_type() || subtype->is_container()) {
-          subname = name + "_elt";
-        } else {
-          subname = type_name(subtype);
-        }
-        generate_element(out, subname, subtype, NULL, false, false, true);
-//*/
         indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_list*)ttype)->get_elem_type()) << "\"/>" << endl;
         indent_down();
         indent(out) << "</xsd:sequence>" << endl;
@@ -250,16 +240,6 @@ void t_xsd_generator::generate_element(ostream& out,
         indent(out) << "<xsd:element name=\"entry_count\" type=\"xsd:integer\"/>" << endl;
         indent(out) << "<xsd:sequence minOccurs=\"0\" maxOccurs=\"unbounded\">" << endl;
         indent_up();
-/*
-        string subname;
-        t_type* subtype = ((t_set*)ttype)->get_elem_type();
-        if (subtype->is_base_type() || subtype->is_container()) {
-          subname = name + "_elt";
-        } else {
-          subname = type_name(subtype);
-        }
-        generate_element(out, subname, subtype, NULL, false, false, true);
-//*/
         indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_set*)ttype)->get_elem_type()) << "\"/>" << endl;
         indent_down();
         indent(out) << "</xsd:sequence>" << endl;
@@ -278,23 +258,6 @@ void t_xsd_generator::generate_element(ostream& out,
         indent_up();
         indent(out) << "<xsd:element name=\"key\" type=\"" << type_name(((t_map*)ttype)->get_key_type()) << "\"/>" << endl;
         indent(out) << "<xsd:element name=\"val\" type=\"" << type_name(((t_map*)ttype)->get_val_type()) << "\"/>" << endl;
-/*
-        string subname;
-        t_type* subtype = ((t_map*)ttype)->get_key_type();
-        if (subtype->is_base_type() || subtype->is_container()) {
-          subname = name + "_key";
-        } else {
-          subname = type_name(subtype);
-        }
-        generate_element(out, subname, subtype, NULL, false, false, true);
-        subtype = ((t_map*)ttype)->get_val_type();
-        if (subtype->is_base_type() || subtype->is_container()) {
-          subname = name + "_val";
-        } else {
-          subname = type_name(subtype);
-        }
-        generate_element(out, subname, subtype, NULL, false, false, true);
-//*/
         indent_down();
         indent(out) << "</xsd:sequence>" << endl;
         indent_down();
